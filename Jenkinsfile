@@ -50,18 +50,21 @@ pipeline {
         // Stage 4: Configure Test Server (Ansible)
         stage('Provision Test Server') {
             steps {
-                withCredentials([string(credentialsId: 'jenkins-ssh-key', variable: 'SSH_KEY_CONTENT')]) {
+                withCredentials([file(credentialsId: 'jenkins-ssh-key', variable: 'SSH_KEY_FILE')]) {
                     sh '''
                         # Ensure .ssh directory exists with correct permissions
                         mkdir -p /var/lib/jenkins/.ssh
                         chmod 700 /var/lib/jenkins/.ssh
                         
-                        # Write the key content to file
-                        echo "$SSH_KEY_CONTENT" > /var/lib/jenkins/.ssh/jenkins_financeme_key
+                        # Copy the key file
+                        cp "$SSH_KEY_FILE" /var/lib/jenkins/.ssh/jenkins_financeme_key
                         chmod 600 /var/lib/jenkins/.ssh/jenkins_financeme_key
                         
                         # Generate public key
-                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key > /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
+                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key > /var/lib/jenkins/.ssh/jenkins_financeme_key.pub || {
+                            echo "Failed to generate public key. Key content might be malformed."
+                            exit 1
+                        }
                         chmod 644 /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
                     '''
                     
