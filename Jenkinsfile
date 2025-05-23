@@ -32,7 +32,7 @@ pipeline {
             steps {
                 script {
                     docker.build("financeme/account-service:${env.BUILD_ID}")
-                    docker.withRegistry('https://registry.hub.docker.com', 'docker-hub') {
+                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub_id') {
                         docker.image("financeme/account-service:${env.BUILD_ID}").push()
                     }
                 }
