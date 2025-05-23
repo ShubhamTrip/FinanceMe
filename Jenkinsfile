@@ -59,8 +59,8 @@ pipeline {
                 ssh-keygen -y -f ~/.ssh/jenkins_financeme_key > ~/.ssh/jenkins_financeme_key.pub
                 '''
             sh 'terraform init'
-            sh 'terraform apply -auto-approve -var="environment=test -var="public_key=$(cat ~/.ssh/jenkins_financeme_key.pub)"'
-            
+            sh 'terraform apply -auto-approve -var="environment=test" -var="public_key=$(cat ~/.ssh/jenkins_financeme_key.pub)"'
+
             // Generate inventory file dynamically
             sh '''
                 mkdir -p ../ansible/inventory/
