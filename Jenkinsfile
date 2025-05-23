@@ -50,14 +50,14 @@ pipeline {
         // Stage 4: Configure Test Server (Ansible)
         stage('Provision Test Server') {
             steps {
-                withCredentials([sshUserPrivateKey(credentialsId: 'jenkins-ssh-key', keyFileVariable: 'SSH_KEY_FILE')]) {
+                withCredentials([string(credentialsId: 'jenkins-ssh-key', variable: 'SSH_KEY_CONTENT')]) {
                     sh '''
                         # Ensure .ssh directory exists with correct permissions
                         mkdir -p /var/lib/jenkins/.ssh
                         chmod 700 /var/lib/jenkins/.ssh
                         
-                        # Copy the key file
-                        cp "$SSH_KEY_FILE" /var/lib/jenkins/.ssh/jenkins_financeme_key
+                        # Write the key content to file
+                        echo "$SSH_KEY_CONTENT" > /var/lib/jenkins/.ssh/jenkins_financeme_key
                         chmod 600 /var/lib/jenkins/.ssh/jenkins_financeme_key
                         
                         # Generate public key
