@@ -50,6 +50,12 @@ pipeline {
         stage('Provision Test Server') {
             steps {
         dir('terraform') {
+            sh '''
+                mkdir -p ~/.ssh
+                echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+                chmod 600 ~/.ssh/id_rsa
+                ssh-keygen -y -f ~/.ssh/id_rsa > ~/.ssh/id_rsa.pub
+            '''
             sh 'terraform init'
             sh 'terraform apply -auto-approve -var="environment=test"'
             
