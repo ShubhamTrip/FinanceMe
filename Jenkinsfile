@@ -4,6 +4,7 @@ pipeline {
         AWS_ACCESS_KEY_ID     = credentials('aws_cred')
         AWS_SECRET_ACCESS_KEY = credentials('aws_cred')
         DOCKER_HUB_CREDENTIALS = credentials('dockerhub_id')
+        SSH_PRIVATE_KEY = credentials('jenkins-ssh-key')
     }
     stages {
         // Stage 1: Checkout Code
@@ -52,12 +53,14 @@ pipeline {
         dir('terraform') {
             sh '''
                 mkdir -p ~/.ssh
-                echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-                chmod 600 ~/.ssh/id_rsa
-                ssh-keygen -y -f ~/.ssh/id_rsa > ~/.ssh/id_rsa.pub
-            '''
+                 sh '''
+                 echo "$SSH_PRIVATE_KEY" > ~/.ssh/jenkins_financeme_key
+                        chmod 600 ~/.ssh/jenkins_financeme_key
+                        # Generate public key
+                        ssh-keygen -y -f ~/.ssh/jenkins_financeme_key > ~/.ssh/jenkins_financeme_key.pub
+                    '''
             sh 'terraform init'
-            sh 'terraform apply -auto-approve -var="environment=test"'
+            sh 'terraform apply -auto-approve -var="environment=test -var="public_key=$(cat ~/.ssh/jenkins_financeme_key.pub)"'
             
             // Generate inventory file dynamically
             sh '''
@@ -117,6 +120,12 @@ pipeline {
                     ]
                 )
             }
+        }
+    }
+    post {
+        always {
+            // Clean up sensitive files
+            sh 'rm -f ~/.ssh/jenkins_financeme_key*'
         }
     }
 }
