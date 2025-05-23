@@ -51,14 +51,13 @@ pipeline {
         stage('Provision Test Server') {
             steps {
         dir('terraform') {
+            sh 'mkdir -p ~/.ssh'
             sh '''
-                mkdir -p ~/.ssh
-                 sh '''
-                 echo "$SSH_PRIVATE_KEY" > ~/.ssh/jenkins_financeme_key
-                        chmod 600 ~/.ssh/jenkins_financeme_key
-                        # Generate public key
-                        ssh-keygen -y -f ~/.ssh/jenkins_financeme_key > ~/.ssh/jenkins_financeme_key.pub
-                    '''
+                echo "$SSH_PRIVATE_KEY" > ~/.ssh/jenkins_financeme_key
+                chmod 600 ~/.ssh/jenkins_financeme_key
+                # Generate public key
+                ssh-keygen -y -f ~/.ssh/jenkins_financeme_key > ~/.ssh/jenkins_financeme_key.pub
+                '''
             sh 'terraform init'
             sh 'terraform apply -auto-approve -var="environment=test -var="public_key=$(cat ~/.ssh/jenkins_financeme_key.pub)"'
             

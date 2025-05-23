@@ -4,7 +4,7 @@ provider "aws" {
 
 resource "aws_key_pair" "finance_me_key" {
   key_name   = "financeme-key-${var.environment}"
-  public_key = tls_private_key.financeme.public_key_openssh
+  public_key = var.public_key
 }
 
 resource "tls_private_key" "financeme" {
