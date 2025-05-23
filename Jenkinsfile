@@ -32,11 +32,21 @@ pipeline {
             steps {
                 script {
                     docker.build("financeme/account-service:${env.BUILD_ID}")
-                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub_id') {
-                        docker.image("financeme/account-service:${env.BUILD_ID}").push()
-                    }
                 }
             }
+        }
+        stage('Docker Push') {
+            steps {
+               withDockerRegistry(
+                  [url: 'https://registry.hub.docker.com', 
+                  credentialsId: 'dockerhub_id']  // Combined username:token credential
+              ) {
+                sh '''
+                  docker tag financeme/account-service:${BUILD_ID} shubhamtrip16/account-service:${BUILD_ID}
+                  docker push shubhamtrip16/account-service:${BUILD_ID}
+                   '''
+                }
+              }
         }
         // Stage 4: Configure Test Server (Ansible)
         stage('Provision Test Server') {
