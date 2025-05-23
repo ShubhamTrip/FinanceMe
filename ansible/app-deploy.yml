@@ -1,0 +1,16 @@
+---
+- hosts: all
+  become: yes
+  tasks:
+    - name: Pull Docker Image
+      docker_image:
+        name: "{{ docker_image }}"
+        source: pull
+
+    - name: Run Container
+      docker_container:
+        name: account-service
+        image: "{{ docker_image }}"
+        ports:
+          - "8081:8081"
+        restart_policy: always

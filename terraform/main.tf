@@ -33,13 +33,27 @@ resource "aws_security_group" "finance_me_sg" {
   }
 }
 
-resource "aws_instance" "finance_me_ec2" {
+provider "aws" {
+  region = "eu-central-1"
+}
+
+resource "aws_instance" "test_server" {
   ami           = "ami-0c02fb55956c7d316"  
   instance_type = "t2.micro"
   key_name      = aws_key_pair.finance_me_key.key_name
   security_groups = [aws_security_group.finance_me_sg.name]
-
   tags = {
-    Name = "finance-me-app-server"
+    Name = "FinanceMe-Test-Server"
+  }
+}
+
+resource "aws_instance" "prod_server" {
+  count         = var.environment == "prod" ? 1 : 0
+  ami           = "ami-0c02fb55956c7d316"  
+  instance_type = "t2.micro"
+  key_name      = aws_key_pair.finance_me_key.key_name
+  security_groups = [aws_security_group.finance_me_sg.name]
+  tags = {
+    Name = "FinanceMe-Prod-Server"
   }
 }
