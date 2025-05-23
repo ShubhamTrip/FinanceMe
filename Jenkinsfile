@@ -9,7 +9,7 @@ pipeline {
         // Stage 1: Checkout Code
         stage('Cloning Repo') {
             steps {
-                git branch: 'master', url: 'https://github.com/financeme/account-service.git'
+                git branch: 'master', url: 'https://github.com/ShubhamTrip/FinanceMe.git'
             }
         }
 
@@ -38,29 +38,25 @@ pipeline {
                 }
             }
         }
-
-        // Stage 4: Provision Test Server (Terraform)
+        // Stage 4: Configure Test Server (Ansible)
         stage('Provision Test Server') {
             steps {
-                dir('terraform') {
-                    sh 'terraform init'
-                    sh 'terraform apply -auto-approve -var="environment=test"'
+        dir('terraform') {
+            sh 'terraform init'
+            sh 'terraform apply -auto-approve -var="environment=test"'
+            
+            // Generate inventory file dynamically
+            sh '''
+                mkdir -p ../ansible/inventory/
+                echo "test-server ansible_host=$(terraform output -raw test_server_ip)" > ../ansible/inventory/test-hosts.yml
+                echo "ansible_user=ubuntu" >> ../ansible/inventory/test-hosts.yml
+                echo "ansible_ssh_private_key_file=~/.ssh/financeme-key.pem" >> ../ansible/inventory/test-hosts.yml
+            '''
                 }
-            }
+             }
         }
 
-        // Stage 5: Configure Test Server (Ansible)
-        stage('Configure Test Server') {
-            steps {
-                ansiblePlaybook(
-                    playbook: 'ansible/configure-server.yml',
-                    inventory: 'ansible/inventory/test-hosts.yml',
-                    credentialsId: 'ssh-key'
-                )
-            }
-        }
-
-        // Stage 6: Deploy to Test Server
+        // Stage 5: Deploy to Test Server
         stage('Deploy to Test') {
             steps {
                 ansiblePlaybook(
@@ -73,14 +69,14 @@ pipeline {
             }
         }
 
-        // Stage 7: Run Automated Tests (Selenium)
+        // Stage 6: Run Automated Tests (Selenium)
         stage('UI Tests') {
             steps {
                 sh 'mvn test -Pselenium-tests'  // Runs Selenium tests
             }
         }
 
-        // Stage 8: Deploy to Prod (If Tests Pass)
+        // Stage 7: Deploy to Prod (If Tests Pass)
         stage('Deploy to Prod') {
             when {
                 expression { currentBuild.resultIsBetterOrEqualTo('SUCCESS') }
@@ -88,6 +84,12 @@ pipeline {
             steps {
                 dir('terraform') {
                     sh 'terraform apply -auto-approve -var="environment=prod"'
+                    // Generate inventory file dynamically
+                    sh '''
+                      echo "prod-server ansible_host=$(terraform output -raw prod_server_ip)" > ../ansible/inventory/prod-hosts.yml
+                      echo "ansible_user=ubuntu" >> ../ansible/inventory/prod-hosts.yml
+                      echo "ansible_ssh_private_key_file=~/.ssh/financeme-key.pem" >> ../ansible/inventory/prod-hosts.yml
+                  '''
                 }
                 ansiblePlaybook(
                     playbook: 'ansible/configure-server.yml',
