@@ -68,19 +68,21 @@ pipeline {
                         chmod 644 /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
                     '''
                     
-                    sh 'terraform init'
-                    sh '''
-                        terraform apply -auto-approve \
-                        -var="environment=test" \
-                        -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
-                    '''
+                    dir('terraform') {
+                        sh 'terraform init'
+                        sh '''
+                            terraform apply -auto-approve \
+                            -var="environment=test" \
+                            -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
+                        '''
+                    }
 
                     // Generate inventory file dynamically
                     sh '''
-                        mkdir -p ../ansible/inventory/
-                        echo "test-server ansible_host=$(terraform output -raw test_server_ip)" > ../ansible/inventory/test-hosts.yml
-                        echo "ansible_user=ubuntu" >> ../ansible/inventory/test-hosts.yml
-                        echo "ansible_ssh_private_key_file=/var/lib/jenkins/.ssh/jenkins_financeme_key" >> ../ansible/inventory/test-hosts.yml
+                        mkdir -p ansible/inventory/
+                        echo "test-server ansible_host=$(cd terraform && terraform output -raw test_server_ip)" > ansible/inventory/test-hosts.yml
+                        echo "ansible_user=ubuntu" >> ansible/inventory/test-hosts.yml
+                        echo "ansible_ssh_private_key_file=/var/lib/jenkins/.ssh/jenkins_financeme_key" >> ansible/inventory/test-hosts.yml
                     '''
                 }
             }
