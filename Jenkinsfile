@@ -37,11 +37,9 @@ pipeline {
         }
         stage('Docker Push') {
             steps {
-               withDockerRegistry(
-                  [url: 'https://registry.hub.docker.com', 
-                  credentialsId: 'dockerhub_id']  // Combined username:token credential
-              ) {
-                sh '''
+               withCredentials([usernamePassword(credentialsId: 'dockerhub_id', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+               sh '''
+                  echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
                   docker push shubhamtrip16/account-service:8
                    '''
                 }
