@@ -42,8 +42,7 @@ pipeline {
                   credentialsId: 'dockerhub_id']  // Combined username:token credential
               ) {
                 sh '''
-                  docker tag financeme/account-service:${BUILD_ID} shubhamtrip16/account-service:${BUILD_ID}
-                  docker push shubhamtrip16/account-service:${BUILD_ID}
+                  docker push shubhamtrip16/account-service:8
                    '''
                 }
               }
