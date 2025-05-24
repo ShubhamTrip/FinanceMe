@@ -92,7 +92,7 @@ pipeline {
         stage('Deploy to Test') {
             steps {
                 ansiblePlaybook(
-                    playbook: 'ansible/deploy-app.yml',
+                    playbook: 'ansible/app-deploy.yml',
                     inventory: 'ansible/inventory/test-hosts.yml',
                     extraVars: [
                         'docker_image': "financeme/account-service:${env.BUILD_ID}"
@@ -120,15 +120,11 @@ pipeline {
                     sh '''
                       echo "prod-server ansible_host=$(terraform output -raw prod_server_ip)" > ../ansible/inventory/prod-hosts.yml
                       echo "ansible_user=ubuntu" >> ../ansible/inventory/prod-hosts.yml
-                      echo "ansible_ssh_private_key_file=~/.ssh/financeme-key.pem" >> ../ansible/inventory/prod-hosts.yml
+                      echo "ansible_ssh_private_key_file=/var/lib/jenkins/.ssh/jenkins_financeme_key" >> ../ansible/inventory/prod-hosts.yml
                   '''
                 }
                 ansiblePlaybook(
-                    playbook: 'ansible/configure-server.yml',
-                    inventory: 'ansible/inventory/prod-hosts.yml'
-                )
-                ansiblePlaybook(
-                    playbook: 'ansible/deploy-app.yml',
+                    playbook: 'ansible/app-deploy.yml',
                     inventory: 'ansible/inventory/prod-hosts.yml',
                     extraVars: [
                         'docker_image': "financeme/account-service:${env.BUILD_ID}"

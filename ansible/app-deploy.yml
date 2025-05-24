@@ -2,10 +2,38 @@
 - hosts: all
   become: yes
   tasks:
+    - name: Install Docker dependencies
+      apt:
+        name: 
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: present
+        update_cache: yes
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+
+    - name: Ensure Docker is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
     - name: Pull Docker Image
       docker_image:
         name: "{{ docker_image }}"
         source: pull
+        force_source: yes
+
+    - name: Stop existing container
+      docker_container:
+        name: account-service
+        state: absent
+      ignore_errors: yes
 
     - name: Run Container
       docker_container:
@@ -14,3 +42,4 @@
         ports:
           - "8081:8081"
         restart_policy: always
+        state: started
