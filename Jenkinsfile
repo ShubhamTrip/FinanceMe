@@ -92,22 +92,44 @@ pipeline {
                         -replace="aws_key_pair.finance_me_key" \
                         -replace="aws_instance.test_server"
                         
-                        # Verify the key pair in AWS
-                        echo "Verifying key pair in AWS:"
-                        aws ec2 describe-key-pairs --key-names "$KEY_NAME" --query 'KeyPairs[0].[KeyName,KeyFingerprint]' --output text
-                        
-                        # Get the instance ID and wait for it to be ready
+                        # Get instance details
                         INSTANCE_ID=$(terraform output -raw test_server_instance_id)
-                        echo "Waiting for instance $INSTANCE_ID to be ready..."
+                        echo "Instance ID: $INSTANCE_ID"
+                        
+                        # Wait for instance to be running and status checks to pass
+                        echo "Waiting for instance to be running..."
+                        aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
+                        
+                        echo "Waiting for instance status checks..."
                         aws ec2 wait instance-status-ok --instance-ids "$INSTANCE_ID"
                         
-                        # Get instance details and metadata
+                        # Get instance details including AMI ID
                         echo "Instance details:"
-                        aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].[State.Name,PublicIpAddress,KeyName]' --output text
+                        AMI_ID=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+                            --query 'Reservations[0].Instances[0].ImageId' --output text)
                         
-                        # Get instance metadata
-                        echo "Instance system log:"
-                        aws ec2 get-console-output --instance-id "$INSTANCE_ID"
+                        echo "AMI ID: $AMI_ID"
+                        
+                        # Get AMI details to determine default user
+                        AMI_NAME=$(aws ec2 describe-images --image-ids "$AMI_ID" \
+                            --query 'Images[0].Name' --output text)
+                        
+                        echo "AMI Name: $AMI_NAME"
+                        
+                        # Determine SSH user based on AMI name
+                        SSH_USER="ec2-user"  # Default to ec2-user
+                        if [[ "$AMI_NAME" == *"ubuntu"* ]]; then
+                            SSH_USER="ubuntu"
+                        elif [[ "$AMI_NAME" == *"debian"* ]]; then
+                            SSH_USER="admin"
+                        elif [[ "$AMI_NAME" == *"centos"* ]]; then
+                            SSH_USER="centos"
+                        fi
+                        
+                        echo "Using SSH user: $SSH_USER"
+                        
+                        # Export the SSH user for use in inventory
+                        echo "SSH_USER=$SSH_USER" > ssh_config
                     '''
                 }
 
@@ -115,6 +137,9 @@ pipeline {
                 sh '''
                     mkdir -p ansible/inventory/
                     TEST_SERVER_IP=$(cd terraform && terraform output -raw test_server_ip)
+                    SSH_USER=$(cd terraform && cat ssh_config | grep SSH_USER | cut -d= -f2)
+                    
+                    echo "Creating inventory with IP: $TEST_SERVER_IP and user: $SSH_USER"
                     
                     cat > ansible/inventory/test-hosts.yml << EOL
 ---
@@ -122,7 +147,7 @@ all:
   hosts:
     test-server:
       ansible_host: $TEST_SERVER_IP
-      ansible_user: ubuntu
+      ansible_user: $SSH_USER
       ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
       ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v'
 EOL
@@ -134,7 +159,6 @@ EOL
                     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
                         echo "Attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES"
                         
-                        # Add a delay between retries
                         if [ $RETRY_COUNT -gt 0 ]; then
                             sleep 30
                         fi
@@ -144,27 +168,29 @@ EOL
                            -o StrictHostKeyChecking=no \
                            -o UserKnownHostsFile=/dev/null \
                            -o ConnectTimeout=10 \
-                           ubuntu@$TEST_SERVER_IP 'echo SSH connection successful'; then
+                           $SSH_USER@$TEST_SERVER_IP 'echo "SSH connection successful"; id; whoami'; then
                             echo "SSH connection successful!"
-                            exit 0
+                            break
                         else
                             echo "Connection attempt $((RETRY_COUNT + 1)) failed"
-                            echo "Local key fingerprint:"
+                            echo "Local key fingerprints:"
                             ssh-keygen -l -f /var/lib/jenkins/.ssh/jenkins_financeme_key
-                            echo "AWS key fingerprint for $TEST_SERVER_IP:"
+                            ssh-keygen -E md5 -l -f /var/lib/jenkins/.ssh/jenkins_financeme_key
+                            echo "AWS key fingerprint:"
                             aws ec2 describe-key-pairs --key-names "financeme-key-test" --query 'KeyPairs[0].KeyFingerprint' --output text
+                            
+                            # Get instance console output for debugging
+                            echo "Instance console output:"
+                            aws ec2 get-console-output --instance-id $(cd terraform && terraform output -raw test_server_instance_id)
                         fi
                         
                         RETRY_COUNT=$((RETRY_COUNT + 1))
                     done
                     
-                    # If we get here, all retries failed
-                    echo "SSH connection failed after $MAX_RETRIES attempts. Final debugging info:"
-                    echo "Server IP: $TEST_SERVER_IP"
-                    echo "Instance details from AWS:"
-                    aws ec2 describe-instances --filters "Name=ip-address,Values=$TEST_SERVER_IP" \
-                        --query 'Reservations[0].Instances[0].[InstanceId,State.Name,KeyName]' --output text
-                    exit 1
+                    if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+                        echo "SSH connection failed after $MAX_RETRIES attempts"
+                        exit 1
+                    fi
                 '''
             }
         }
