@@ -130,6 +130,16 @@ pipeline {
                         
                         # Export the SSH user for use in inventory
                         echo "SSH_USER=$SSH_USER" > ssh_config
+                        
+                        # Install Python 3.8 on the instance
+                        echo "Installing Python 3.8 on the instance..."
+                        ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
+                            -o StrictHostKeyChecking=no \
+                            -o UserKnownHostsFile=/dev/null \
+                            $SSH_USER@$(terraform output -raw test_server_ip) \
+                            'sudo amazon-linux-extras enable python3.8 && \
+                             sudo yum install -y python3.8 && \
+                             sudo alternatives --set python3 /usr/bin/python3.8'
                     '''
                 }
 
@@ -150,6 +160,7 @@ all:
       ansible_user: $SSH_USER
       ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
       ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v'
+      ansible_python_interpreter: /usr/bin/python3.8
 EOL
 
                     echo "Testing SSH connection with retries..."
