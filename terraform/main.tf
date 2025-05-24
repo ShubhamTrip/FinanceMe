@@ -7,10 +7,6 @@ resource "aws_key_pair" "finance_me_key" {
   public_key = var.public_key
 }
 
-resource "tls_private_key" "financeme" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
 resource "aws_security_group" "finance_me_sg" {
   name        = "finance_me_sg"
   description = "Allow SSH and app traffic"

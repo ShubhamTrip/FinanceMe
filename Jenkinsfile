@@ -56,24 +56,33 @@ pipeline {
                         mkdir -p /var/lib/jenkins/.ssh
                         chmod 700 /var/lib/jenkins/.ssh
                         
-                        # Copy the key file
+                        # Copy and check the key file
                         cp "$SSH_KEY_FILE" /var/lib/jenkins/.ssh/jenkins_financeme_key
                         chmod 600 /var/lib/jenkins/.ssh/jenkins_financeme_key
                         
-                        # Generate and display public key for verification
-                        echo "Generated Public Key:"
-                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key || {
-                            echo "Failed to generate public key. Checking key format:"
-                            head -n 1 /var/lib/jenkins/.ssh/jenkins_financeme_key
-                        }
+                        echo "=== Debugging SSH Key ==="
+                        echo "Private key format:"
+                        head -n 1 /var/lib/jenkins/.ssh/jenkins_financeme_key
                         
-                        # Generate public key file
-                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key > /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
+                        echo "\\nGenerating public key..."
+                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key > /var/lib/jenkins/.ssh/jenkins_financeme_key.pub || {
+                            echo "Failed to generate public key. Key file content type:"
+                            file /var/lib/jenkins/.ssh/jenkins_financeme_key
+                            exit 1
+                        }
                         chmod 644 /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
                         
-                        # Test SSH connection
-                        echo "Testing SSH connection:"
-                        ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key -o StrictHostKeyChecking=no ubuntu@$(cd terraform && terraform output -raw test_server_ip) 'echo SSH connection successful' || echo "SSH connection failed"
+                        echo "\\nGenerated public key:"
+                        cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
+                        
+                        echo "\\nTesting SSH with verbose output:"
+                        TEST_SERVER_IP=$(cd terraform && terraform output -raw test_server_ip)
+                        echo "Server IP: $TEST_SERVER_IP"
+                        
+                        ssh -v -i /var/lib/jenkins/.ssh/jenkins_financeme_key -o StrictHostKeyChecking=no ubuntu@$TEST_SERVER_IP 'echo SSH connection successful' || {
+                            echo "\\nSSH connection failed. Key details:"
+                            ssh-keygen -l -f /var/lib/jenkins/.ssh/jenkins_financeme_key
+                        }
                     '''
                     
                     dir('terraform') {
