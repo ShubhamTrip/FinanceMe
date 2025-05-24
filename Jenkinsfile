@@ -70,18 +70,35 @@ pipeline {
                 
                 dir('terraform') {
                     sh '''
+                        # Delete existing key pair if it exists
+                        KEY_NAME="financeme-key-test"
+                        echo "Checking for existing key pair: $KEY_NAME"
+                        if aws ec2 describe-key-pairs --key-names "$KEY_NAME" 2>/dev/null; then
+                            echo "Deleting existing key pair"
+                            aws ec2 delete-key-pair --key-name "$KEY_NAME"
+                        fi
+                        
                         # Use the generated public key for terraform
                         terraform init
+                        
+                        # Force replacement of key pair
                         terraform apply -auto-approve \
                         -var="environment=test" \
-                        -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
+                        -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)" \
+                        -replace="aws_key_pair.finance_me_key"
                         
-                        # Get the instance ID for verification
-                        INSTANCE_ID=$(terraform output -raw test_server_instance_id || echo "")
-                        if [ -n "$INSTANCE_ID" ]; then
-                            echo "Waiting for instance to be ready..."
-                            aws ec2 wait instance-status-ok --instance-ids $INSTANCE_ID
-                        fi
+                        # Verify the key pair in AWS
+                        echo "Verifying key pair in AWS:"
+                        aws ec2 describe-key-pairs --key-names "$KEY_NAME" --query 'KeyPairs[0].[KeyName,KeyFingerprint]' --output text
+                        
+                        # Get the instance ID and wait for it to be ready
+                        INSTANCE_ID=$(terraform output -raw test_server_instance_id)
+                        echo "Waiting for instance $INSTANCE_ID to be ready..."
+                        aws ec2 wait instance-status-ok --instance-ids "$INSTANCE_ID"
+                        
+                        # Get instance details
+                        echo "Instance details:"
+                        aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].[State.Name,PublicIpAddress,KeyName]' --output text
                     '''
                 }
 
@@ -98,7 +115,7 @@ all:
       ansible_host: $TEST_SERVER_IP
       ansible_user: ubuntu
       ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
-      ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+      ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v'
 EOL
 
                     echo "Testing SSH connection with retries..."
@@ -108,33 +125,36 @@ EOL
                     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
                         echo "Attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES"
                         
-                        # Add a small delay between retries
+                        # Add a delay between retries
                         if [ $RETRY_COUNT -gt 0 ]; then
                             sleep 30
                         fi
                         
-                        # Try SSH connection
-                        if ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
+                        # Try SSH connection with verbose output
+                        if ssh -v -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
                            -o StrictHostKeyChecking=no \
                            -o UserKnownHostsFile=/dev/null \
                            -o ConnectTimeout=10 \
                            ubuntu@$TEST_SERVER_IP 'echo SSH connection successful'; then
                             echo "SSH connection successful!"
                             exit 0
+                        else
+                            echo "Connection attempt $((RETRY_COUNT + 1)) failed"
+                            echo "Local key fingerprint:"
+                            ssh-keygen -l -f /var/lib/jenkins/.ssh/jenkins_financeme_key
+                            echo "AWS key fingerprint for $TEST_SERVER_IP:"
+                            aws ec2 describe-key-pairs --key-names "financeme-key-test" --query 'KeyPairs[0].KeyFingerprint' --output text
                         fi
                         
                         RETRY_COUNT=$((RETRY_COUNT + 1))
                     done
                     
                     # If we get here, all retries failed
-                    echo "SSH connection failed after $MAX_RETRIES attempts. Debugging info:"
+                    echo "SSH connection failed after $MAX_RETRIES attempts. Final debugging info:"
                     echo "Server IP: $TEST_SERVER_IP"
-                    echo "Key fingerprint:"
-                    ssh-keygen -l -f /var/lib/jenkins/.ssh/jenkins_financeme_key
-                    echo "Public key:"
-                    cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
-                    echo "Verifying key in AWS:"
-                    aws ec2 describe-key-pairs --key-names "financeme-key-test" --query 'KeyPairs[0].KeyFingerprint' --output text
+                    echo "Instance details from AWS:"
+                    aws ec2 describe-instances --filters "Name=ip-address,Values=$TEST_SERVER_IP" \
+                        --query 'Reservations[0].Instances[0].[InstanceId,State.Name,KeyName]' --output text
                     exit 1
                 '''
             }
