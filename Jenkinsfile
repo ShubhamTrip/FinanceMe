@@ -50,66 +50,60 @@ pipeline {
         // Stage 4: Configure Test Server (Ansible)
         stage('Provision Test Server') {
             steps {
-                withCredentials([file(credentialsId: 'jenkins-ssh-key', variable: 'SSH_KEY_FILE')]) {
-                    sh '''
-                        # Ensure .ssh directory exists with correct permissions
-                        mkdir -p /var/lib/jenkins/.ssh
-                        chmod 700 /var/lib/jenkins/.ssh
-                        
-                        # Copy and check the key file
-                        cp "$SSH_KEY_FILE" /var/lib/jenkins/.ssh/jenkins_financeme_key
-                        chmod 600 /var/lib/jenkins/.ssh/jenkins_financeme_key
-                        
-                        echo "=== Debugging SSH Key ==="
-                        echo "Private key format:"
-                        head -n 1 /var/lib/jenkins/.ssh/jenkins_financeme_key
-                        
-                        echo "\\nGenerating public key..."
-                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key > /var/lib/jenkins/.ssh/jenkins_financeme_key.pub || {
-                            echo "Failed to generate public key. Key file content type:"
-                            file /var/lib/jenkins/.ssh/jenkins_financeme_key
-                            exit 1
-                        }
-                        chmod 644 /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
-                        
-                        echo "\\nGenerated public key:"
-                        cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
-                        
-                        echo "\\nTesting SSH with verbose output:"
-                        TEST_SERVER_IP=$(cd terraform && terraform output -raw test_server_ip)
-                        echo "Server IP: $TEST_SERVER_IP"
-                        
-                        ssh -v -i /var/lib/jenkins/.ssh/jenkins_financeme_key -o StrictHostKeyChecking=no ubuntu@$TEST_SERVER_IP 'echo SSH connection successful' || {
-                            echo "\\nSSH connection failed. Key details:"
-                            ssh-keygen -l -f /var/lib/jenkins/.ssh/jenkins_financeme_key
-                        }
-                    '''
+                sh '''
+                    # Generate a new SSH key pair
+                    mkdir -p /var/lib/jenkins/.ssh
+                    chmod 700 /var/lib/jenkins/.ssh
                     
-                    dir('terraform') {
-                        sh 'terraform init'
-                        sh '''
-                            terraform apply -auto-approve \
-                            -var="environment=test" \
-                            -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
-                        '''
-                    }
-
-                    // Generate inventory file dynamically
+                    # Generate new key if it doesn't exist
+                    if [ ! -f /var/lib/jenkins/.ssh/jenkins_financeme_key ]; then
+                        ssh-keygen -t rsa -b 4096 -f /var/lib/jenkins/.ssh/jenkins_financeme_key -N ""
+                        echo "Generated new SSH key pair"
+                    fi
+                    
+                    chmod 600 /var/lib/jenkins/.ssh/jenkins_financeme_key
+                    chmod 644 /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
+                    
+                    echo "Public key to be used:"
+                    cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
+                '''
+                
+                dir('terraform') {
                     sh '''
-                        mkdir -p ansible/inventory/
-                        SERVER_IP=$(cd terraform && terraform output -raw test_server_ip)
-                        cat > ansible/inventory/test-hosts.yml << EOL
+                        # Use the generated public key for terraform
+                        terraform init
+                        terraform apply -auto-approve \
+                        -var="environment=test" \
+                        -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
+                    '''
+                }
+
+                // Generate inventory file dynamically
+                sh '''
+                    mkdir -p ansible/inventory/
+                    cat > ansible/inventory/test-hosts.yml << EOL
 ---
 all:
   hosts:
     test-server:
-      ansible_host: $SERVER_IP
+      ansible_host: $(cd terraform && terraform output -raw test_server_ip)
       ansible_user: ubuntu
       ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
-      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+      ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 EOL
-                    '''
-                }
+
+                    echo "Testing SSH connection:"
+                    TEST_SERVER_IP=$(cd terraform && terraform output -raw test_server_ip)
+                    ssh -v -i /var/lib/jenkins/.ssh/jenkins_financeme_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@$TEST_SERVER_IP 'echo SSH connection successful' || {
+                        echo "SSH connection failed. Debugging info:"
+                        echo "Server IP: $TEST_SERVER_IP"
+                        echo "Key fingerprint:"
+                        ssh-keygen -l -f /var/lib/jenkins/.ssh/jenkins_financeme_key
+                        echo "Public key:"
+                        cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
+                        exit 1
+                    }
+                '''
             }
         }
 
