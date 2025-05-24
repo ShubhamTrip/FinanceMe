@@ -80,9 +80,16 @@ pipeline {
                     // Generate inventory file dynamically
                     sh '''
                         mkdir -p ansible/inventory/
-                        echo "test-server ansible_host=$(cd terraform && terraform output -raw test_server_ip)" > ansible/inventory/test-hosts.yml
-                        echo "ansible_user=ubuntu" >> ansible/inventory/test-hosts.yml
-                        echo "ansible_ssh_private_key_file=/var/lib/jenkins/.ssh/jenkins_financeme_key" >> ansible/inventory/test-hosts.yml
+                        cat > ansible/inventory/test-hosts.yml << 'EOL'
+---
+all:
+  hosts:
+    test-server:
+      ansible_host: $(cd terraform && terraform output -raw test_server_ip)
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
+      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+EOL
                     '''
                 }
             }
@@ -116,12 +123,19 @@ pipeline {
             steps {
                 dir('terraform') {
                     sh 'terraform apply -auto-approve -var="environment=prod"'
-                    // Generate inventory file dynamically
+                    // Generate inventory file dynamically for prod
                     sh '''
-                      echo "prod-server ansible_host=$(terraform output -raw prod_server_ip)" > ../ansible/inventory/prod-hosts.yml
-                      echo "ansible_user=ubuntu" >> ../ansible/inventory/prod-hosts.yml
-                      echo "ansible_ssh_private_key_file=/var/lib/jenkins/.ssh/jenkins_financeme_key" >> ../ansible/inventory/prod-hosts.yml
-                  '''
+                        cat > ansible/inventory/prod-hosts.yml << 'EOL'
+---
+all:
+  hosts:
+    prod-server:
+      ansible_host: $(terraform output -raw prod_server_ip)
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
+      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+EOL
+                    '''
                 }
                 ansiblePlaybook(
                     playbook: 'ansible/app-deploy.yml',
