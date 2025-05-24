@@ -57,7 +57,7 @@ pipeline {
                     
                     # Generate new key if it doesn't exist
                     if [ ! -f /var/lib/jenkins/.ssh/jenkins_financeme_key ]; then
-                        ssh-keygen -t rsa -b 4096 -f /var/lib/jenkins/.ssh/jenkins_financeme_key -N ""
+                        ssh-keygen -t rsa -b 2048 -f /var/lib/jenkins/.ssh/jenkins_financeme_key -N "" -m PEM
                         echo "Generated new SSH key pair"
                     fi
                     
@@ -66,6 +66,10 @@ pipeline {
                     
                     echo "Public key to be used:"
                     cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
+                    
+                    echo "Local key fingerprints (both formats):"
+                    ssh-keygen -l -f /var/lib/jenkins/.ssh/jenkins_financeme_key
+                    ssh-keygen -E md5 -l -f /var/lib/jenkins/.ssh/jenkins_financeme_key
                 '''
                 
                 dir('terraform') {
@@ -81,11 +85,12 @@ pipeline {
                         # Use the generated public key for terraform
                         terraform init
                         
-                        # Force replacement of key pair
+                        # Force replacement of key pair and instance
                         terraform apply -auto-approve \
                         -var="environment=test" \
                         -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)" \
-                        -replace="aws_key_pair.finance_me_key"
+                        -replace="aws_key_pair.finance_me_key" \
+                        -replace="aws_instance.test_server"
                         
                         # Verify the key pair in AWS
                         echo "Verifying key pair in AWS:"
@@ -96,9 +101,13 @@ pipeline {
                         echo "Waiting for instance $INSTANCE_ID to be ready..."
                         aws ec2 wait instance-status-ok --instance-ids "$INSTANCE_ID"
                         
-                        # Get instance details
+                        # Get instance details and metadata
                         echo "Instance details:"
                         aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].[State.Name,PublicIpAddress,KeyName]' --output text
+                        
+                        # Get instance metadata
+                        echo "Instance system log:"
+                        aws ec2 get-console-output --instance-id "$INSTANCE_ID"
                     '''
                 }
 
