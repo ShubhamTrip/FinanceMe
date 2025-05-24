@@ -75,34 +75,67 @@ pipeline {
                         terraform apply -auto-approve \
                         -var="environment=test" \
                         -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
+                        
+                        # Get the instance ID for verification
+                        INSTANCE_ID=$(terraform output -raw test_server_instance_id || echo "")
+                        if [ -n "$INSTANCE_ID" ]; then
+                            echo "Waiting for instance to be ready..."
+                            aws ec2 wait instance-status-ok --instance-ids $INSTANCE_ID
+                        fi
                     '''
                 }
 
                 // Generate inventory file dynamically
                 sh '''
                     mkdir -p ansible/inventory/
+                    TEST_SERVER_IP=$(cd terraform && terraform output -raw test_server_ip)
+                    
                     cat > ansible/inventory/test-hosts.yml << EOL
 ---
 all:
   hosts:
     test-server:
-      ansible_host: $(cd terraform && terraform output -raw test_server_ip)
+      ansible_host: $TEST_SERVER_IP
       ansible_user: ubuntu
       ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
       ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 EOL
 
-                    echo "Testing SSH connection:"
-                    TEST_SERVER_IP=$(cd terraform && terraform output -raw test_server_ip)
-                    ssh -v -i /var/lib/jenkins/.ssh/jenkins_financeme_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@$TEST_SERVER_IP 'echo SSH connection successful' || {
-                        echo "SSH connection failed. Debugging info:"
-                        echo "Server IP: $TEST_SERVER_IP"
-                        echo "Key fingerprint:"
-                        ssh-keygen -l -f /var/lib/jenkins/.ssh/jenkins_financeme_key
-                        echo "Public key:"
-                        cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
-                        exit 1
-                    }
+                    echo "Testing SSH connection with retries..."
+                    MAX_RETRIES=5
+                    RETRY_COUNT=0
+                    
+                    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                        echo "Attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES"
+                        
+                        # Add a small delay between retries
+                        if [ $RETRY_COUNT -gt 0 ]; then
+                            sleep 30
+                        fi
+                        
+                        # Try SSH connection
+                        if ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
+                           -o StrictHostKeyChecking=no \
+                           -o UserKnownHostsFile=/dev/null \
+                           -o ConnectTimeout=10 \
+                           ubuntu@$TEST_SERVER_IP 'echo SSH connection successful'; then
+                            echo "SSH connection successful!"
+                            exit 0
+                        fi
+                        
+                        RETRY_COUNT=$((RETRY_COUNT + 1))
+                    done
+                    
+                    # If we get here, all retries failed
+                    echo "SSH connection failed after $MAX_RETRIES attempts. Debugging info:"
+                    echo "Server IP: $TEST_SERVER_IP"
+                    echo "Key fingerprint:"
+                    ssh-keygen -l -f /var/lib/jenkins/.ssh/jenkins_financeme_key
+                    echo "Public key:"
+                    cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
+                    echo "Verifying key in AWS:"
+                    aws ec2 describe-key-pairs --key-names "financeme-key-test" --query 'KeyPairs[0].KeyFingerprint' --output text
+                    exit 1
                 '''
             }
         }
