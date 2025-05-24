@@ -60,12 +60,20 @@ pipeline {
                         cp "$SSH_KEY_FILE" /var/lib/jenkins/.ssh/jenkins_financeme_key
                         chmod 600 /var/lib/jenkins/.ssh/jenkins_financeme_key
                         
-                        # Generate public key
-                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key > /var/lib/jenkins/.ssh/jenkins_financeme_key.pub || {
-                            echo "Failed to generate public key. Key content might be malformed."
-                            exit 1
+                        # Generate and display public key for verification
+                        echo "Generated Public Key:"
+                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key || {
+                            echo "Failed to generate public key. Checking key format:"
+                            head -n 1 /var/lib/jenkins/.ssh/jenkins_financeme_key
                         }
+                        
+                        # Generate public key file
+                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key > /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
                         chmod 644 /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
+                        
+                        # Test SSH connection
+                        echo "Testing SSH connection:"
+                        ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key -o StrictHostKeyChecking=no ubuntu@$(cd terraform && terraform output -raw test_server_ip) 'echo SSH connection successful' || echo "SSH connection failed"
                     '''
                     
                     dir('terraform') {
