@@ -80,12 +80,13 @@ pipeline {
                     // Generate inventory file dynamically
                     sh '''
                         mkdir -p ansible/inventory/
-                        cat > ansible/inventory/test-hosts.yml << 'EOL'
+                        SERVER_IP=$(cd terraform && terraform output -raw test_server_ip)
+                        cat > ansible/inventory/test-hosts.yml << EOL
 ---
 all:
   hosts:
     test-server:
-      ansible_host: $(cd terraform && terraform output -raw test_server_ip)
+      ansible_host: $SERVER_IP
       ansible_user: ubuntu
       ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
       ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
@@ -125,12 +126,13 @@ EOL
                     sh 'terraform apply -auto-approve -var="environment=prod"'
                     // Generate inventory file dynamically for prod
                     sh '''
-                        cat > ansible/inventory/prod-hosts.yml << 'EOL'
+                        SERVER_IP=$(terraform output -raw prod_server_ip)
+                        cat > ../ansible/inventory/prod-hosts.yml << EOL
 ---
 all:
   hosts:
     prod-server:
-      ansible_host: $(terraform output -raw prod_server_ip)
+      ansible_host: $SERVER_IP
       ansible_user: ubuntu
       ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
       ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
