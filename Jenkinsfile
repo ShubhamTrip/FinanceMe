@@ -94,10 +94,6 @@ pipeline {
                 ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
                     -o StrictHostKeyChecking=no \
                     ubuntu@$(terraform -chdir=terraform output -raw test_server_ip) hostname
-                
-                ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
-                    -o StrictHostKeyChecking=no \
-                    ubuntu@$(terraform -chdir=terraform output -raw prod_server_ip) hostname
             '''
                                   }
             }
