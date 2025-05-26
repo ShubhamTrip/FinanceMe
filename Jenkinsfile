@@ -147,6 +147,8 @@ pipeline {
                     ]
                 )
             }
+        }
+    }
     post {
         always {
             // Clean up sensitive files
