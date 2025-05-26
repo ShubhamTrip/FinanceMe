@@ -76,19 +76,33 @@ pipeline {
                             -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
                         '''
                     }
+
                     sh '''
+                            # Create directory if not exists
                             mkdir -p ansible/inventory/
-                            cat > ansible/inventory/test-hosts.yml << 'EOL'
+                            
+                            # First get the IP address
+                            TEST_SERVER_IP=$(terraform -chdir=terraform output -raw test_server_ip)
+                            
+                            # Then create the inventory file with proper YAML formatting
+                            cat << EOF > ansible/inventory/test-hosts.yml
+                        ---
                         all:
-                          hosts:
-                            test-server:
-                              ansible_host: $(terraform -chdir=terraform output -raw test_server_ip)
-                              ansible_user: ubuntu
-                              ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
-                              ansible_ssh_common_args: -o StrictHostKeyChecking=no
-                        EOL
+                            hosts:
+                                 test-server:
+                                     ansible_host: ${TEST_SERVER_IP}
+                                     ansible_user: ubuntu
+                                     ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
+                                     ansible_ssh_common_args: -o StrictHostKeyChecking=no
+                        EOF
+
+                            # Verify the file was created correctly
+                            echo "=== INVENTORY FILE CONTENTS ==="
+                            cat ansible/inventory/test-hosts.yml
+                            echo "=== END OF FILE ==="
                         '''
-                }
+                    
+                                  }
             }
         }
 
