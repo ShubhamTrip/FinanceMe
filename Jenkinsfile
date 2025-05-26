@@ -73,6 +73,8 @@ pipeline {
                         sh '''
                             terraform init
                             terraform apply -auto-approve \
+                            -var="environment=test" \
+                            -var="environment=prod" \
                             -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
                         '''
                     }
@@ -115,6 +117,7 @@ pipeline {
         }
 
         // Stage 7: Deploy to Prod (If Tests Pass)
+
         stage('Deploy to Prod') {
             steps {
                 ansiblePlaybook(

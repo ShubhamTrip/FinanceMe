@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 resource "aws_key_pair" "finance_me_key" {
-  key_name   = "financeme-key
+  key_name   = "financeme-key-${var.environment}"
   public_key = var.public_key
 }
 
@@ -51,6 +51,7 @@ resource "aws_instance" "test_server" {
 }
 
 resource "aws_instance" "prod_server" {
+  count         = var.environment == "prod" ? 1 : 0
   ami           = "ami-084568db4383264d4"  
   instance_type = "t2.micro"
   key_name      = aws_key_pair.finance_me_key.key_name
