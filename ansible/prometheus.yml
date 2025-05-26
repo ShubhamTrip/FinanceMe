@@ -1,24 +1,9 @@
 global:
   scrape_interval: 15s
-  evaluation_interval: 15s
-  scrape_timeout: 10s
 
 scrape_configs:
-  - job_name: 'node'
-    metrics_path: /metrics
-    scheme: http
-    scrape_interval: 15s
-    scrape_timeout: 10s
+  - job_name: 'node_exporters'
     static_configs:
-      - targets: 
-        # Replace these with your actual server IP addresses
-        - '34.230.10.26:9100'  # Replace with your test server IP
-        - '44.211.173.214:9100'  # Replace with your prod server IP
-        labels:
-          environment: 'production'
-    
-    # Enable for debugging connection issues
-    metrics_relabel_configs:
-      - source_labels: [__name__]
-        regex: up
-        action: keep
+      - targets:
+          - '34.230.10.26:9100'
+          - '44.211.173.214:9100'
