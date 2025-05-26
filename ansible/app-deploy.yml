@@ -23,6 +23,15 @@
         state: started
         enabled: yes
 
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Reset SSH connection to allow group changes to take effect
+      meta: reset_connection
+
     - name: Pull Docker Image
       docker_image:
         name: "{{ docker_image }}"
