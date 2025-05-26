@@ -1,0 +1,17 @@
+---
+- name: Install and configure monitoring
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install Node Exporter
+      ansible.builtin.apt:
+        name: prometheus-node-exporter
+        state: present
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
+
+    - name: Start and enable Node Exporter
+      ansible.builtin.systemd:
+        name: prometheus-node-exporter
+        state: started
+        enabled: yes

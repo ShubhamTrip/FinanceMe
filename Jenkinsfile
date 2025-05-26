@@ -129,6 +129,84 @@ pipeline {
                 )
             }
         }
+        stage('Setup Monitoring') {
+        steps {
+            // Deploy Node Exporters
+            ansiblePlaybook(
+                playbook: 'ansible/monitoring-setup.yml',
+                inventory: 'ansible/inventory/test-hosts.yml'
+            )
+            
+            ansiblePlaybook(
+                playbook: 'ansible/monitoring-setup.yml',
+                inventory: 'ansible/inventory/prod-hosts.yml'
+            )
+            
+            // Deploy Prometheus (on a separate monitoring server)
+            sh '''
+                docker run -d \
+                    -p 9090:9090 \
+                    -v /prometheus.yml:/etc/prometheus/prometheus.yml \
+                    --name prometheus \
+                    prom/prometheus
+            '''
+            
+            // Deploy Grafana
+            sh '''
+                docker run -d \
+                    -p 3000:3000 \
+                    --name grafana \
+                    grafana/grafana
+            '''
+        }
+     }
+
+     stage('Configure Grafana') {
+            steps {
+                script {
+                    // Wait for Grafana to be ready
+                    sh 'while ! curl -s http://localhost:3000; do sleep 5; done'
+                    
+                    // Add Prometheus datasource
+                    sh '''
+                        curl -X POST "http://admin:admin@localhost:3000/api/datasources" \
+                        -H "Content-Type: application/json" \
+                        -d '{
+                            "name":"Prometheus",
+                            "type":"prometheus",
+                            "url":"http://prometheus:9090",
+                            "access":"proxy"
+                        }'
+                    '''
+                    
+                    // Import Node Exporter dashboard (ID 1860)
+                    sh '''
+                        curl -X POST "http://admin:admin@localhost:3000/api/dashboards/import" \
+                        -H "Content-Type: application/json" \
+                        -d '{
+                            "dashboard": {
+                                "id": null,
+                                "uid": null,
+                                "title": "Node Exporter Metrics",
+                                "timezone": "browser",
+                                "schemaVersion": 16,
+                                "version": 0
+                            },
+                            "folderId": 0,
+                            "overwrite": true,
+                            "inputs": [
+                                {
+                                    "name": "DS_PROMETHEUS",
+                                    "type": "datasource",
+                                    "pluginId": "prometheus",
+                                    "value": "Prometheus"
+                                }
+                            ]
+                        }'
+                    '''
+                }
+            }
+        }
     }
     post {
         always {
