@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 resource "aws_key_pair" "finance_me_key" {
-  key_name   = "financeme-key-${var.environment}"
+  key_name   = "financeme-key
   public_key = var.public_key
 }
 
