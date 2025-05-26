@@ -124,27 +124,33 @@ pipeline {
             steps {
                 withCredentials([file(credentialsId: 'jenkins-ssh-key', variable: 'SSH_KEY_FILE')]) {
                     // 1. Create ONLY prod server
-                    dir('terraform') {
+                   dir('terraform') {
+                        sh 'terraform init'
                         sh '''
+                            terraform init
                             terraform apply -auto-approve \
                             -var="environment=prod" \
                             -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
                         '''
                     }
-                    
-                    // 2. Inject prod IP into pre-created inventory
-                    sh '''
-                        PROD_IP=$(terraform -chdir=terraform output -raw prod_server_ip)
-                        sed -i "s/__TERRAFORM_PROD_IP__/${PROD_IP}/g" ansible/inventory/prod-hosts.yml
-                        
-                        echo "=== PROD INVENTORY ==="
-                        cat ansible/inventory/prod-hosts.yml
-                        
-                        # Verify connectivity
-                        ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
-                            -o StrictHostKeyChecking=no \
-                            ubuntu@${PROD_IP} hostname
-                    '''
+
+                    script {
+                def PROD_IP = sh(script: 'terraform -chdir=terraform output -raw prod_server_ip', returnStdout: true).trim()
+                
+                sh """
+                    sed -e 's/__TF_PROD_IP__/${PROD_IP}/g' \
+                       ansible/inventory/prod-hosts.template.yml > \
+                       ansible/inventory/prod-hosts.yml
+                """
+            }
+            
+            // Verify connectivity
+            sh '''
+                echo "=== TESTING SSH CONNECTIVITY ==="
+                ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
+                    -o StrictHostKeyChecking=no \
+                    ubuntu@$(terraform -chdir=terraform output -raw prod_server_ip) hostname
+            '''
                 }
             }
         }
