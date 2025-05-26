@@ -144,6 +144,7 @@ pipeline {
             
             // Deploy Prometheus (on a separate monitoring server)
             sh '''
+                docker rm -f prometheus || true
                 docker run -d \
                     -p 9090:9090 \
                     -v ansible/prometheus.yml:/etc/prometheus/prometheus.yml \
