@@ -1,7 +1,0 @@
----
-all:
-  hosts:
-    test-server:
-      ansible_host: __TERRAFORM_TEST_IP__
-      ansible_user: ubuntu
-      ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key

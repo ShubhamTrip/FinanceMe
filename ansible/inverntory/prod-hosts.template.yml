@@ -1,0 +1,8 @@
+---
+all:
+  hosts:
+    prod-server:
+      ansible_host: __TF_PROD_IP__
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
+      ansible_ssh_common_args: -o StrictHostKeyChecking=no

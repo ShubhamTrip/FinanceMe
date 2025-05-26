@@ -48,70 +48,64 @@ pipeline {
               }
         }
         // Stage 4: Configure Test Server
-        stage('Provision Test Server') {
+        stage('Provision Servers') {
             steps {
                 withCredentials([file(credentialsId: 'jenkins-ssh-key', variable: 'SSH_KEY_FILE')]) {
-                    // 1. Setup SSH key with proper permissions
                     sh '''
-                        # Ensure .ssh directory exists with proper permissions
-                        sudo mkdir -p /var/lib/jenkins/.ssh
-                        sudo chmod 700 /var/lib/jenkins/.ssh
+                        # Ensure .ssh directory exists with correct permissions
+                        mkdir -p /var/lib/jenkins/.ssh
+                        chmod 700 /var/lib/jenkins/.ssh
                         
-                        # Copy and set proper permissions on the key
-                        sudo cp "$SSH_KEY_FILE" /var/lib/jenkins/.ssh/jenkins_financeme_key
-                        sudo chmod 600 /var/lib/jenkins/.ssh/jenkins_financeme_key
-                        sudo chown jenkins:jenkins /var/lib/jenkins/.ssh/jenkins_financeme_key
+                        # Copy the key file
+                        cp "$SSH_KEY_FILE" /var/lib/jenkins/.ssh/jenkins_financeme_key
+                        chmod 600 /var/lib/jenkins/.ssh/jenkins_financeme_key
                         
-                        # Generate public key and verify format
-                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key > /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
-                        echo "=== Public Key Content ==="
-                        cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
-                        
-                        # Show key fingerprints for debugging
-                        echo "=== Private Key Fingerprints ==="
-                        ssh-keygen -l -f /var/lib/jenkins/.ssh/jenkins_financeme_key
-                        ssh-keygen -l -E md5 -f /var/lib/jenkins/.ssh/jenkins_financeme_key
+                        # Generate public key
+                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key > /var/lib/jenkins/.ssh/jenkins_financeme_key.pub || {
+                            echo "Failed to generate public key. Key content might be malformed."
+                            exit 1
+                        }
+                        chmod 644 /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
                     '''
                     
-                    // 2. Create test server
                     dir('terraform') {
+                        sh 'terraform init'
                         sh '''
                             terraform init
                             terraform apply -auto-approve \
-                            -var="environment=test" \
+                            -var="create_test_env=true" \
+                            -var="create_prod_env=true" \
                             -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
                         '''
                     }
+
+                    script {
+                def TEST_IP = sh(script: 'terraform -chdir=terraform output -raw test_server_ip', returnStdout: true).trim()
+                def PROD_IP = sh(script: 'terraform -chdir=terraform output -raw prod_server_ip', returnStdout: true).trim()
+                
+                sh """
+                    sed -e 's/__TF_TEST_IP__/${TEST_IP}/g' \
+                       ansible/inventory/test-hosts.template.yml > \
+                       ansible/inventory/test-hosts.yml
                     
-                    // 3. Wait for instance to initialize and verify SSH connection
-                    sh '''
-                        TEST_IP=$(terraform -chdir=terraform output -raw test_server_ip)
-                        echo "Test Server IP: ${TEST_IP}"
-                        
-                        # Update inventory
-                        sed -i "s/__TERRAFORM_TEST_IP__/${TEST_IP}/g" ansible/inventory/test-hosts.yml
-                        echo "=== TEST INVENTORY ==="
-                        cat ansible/inventory/test-hosts.yml
-                        
-                        # Wait for SSH to become available
-                        echo "Waiting for SSH to become available..."
-                        for i in $(seq 1 12); do
-                            if ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
-                               -o StrictHostKeyChecking=no \
-                               -o ConnectTimeout=5 \
-                               -v ubuntu@${TEST_IP} 'echo "SSH connection successful"'; then
-                                break
-                            fi
-                            echo "Attempt $i: SSH connection failed, waiting 10 seconds..."
-                            sleep 10
-                        done
-                        
-                        # Final connection test with full debugging
-                        ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
-                            -o StrictHostKeyChecking=no \
-                            -v ubuntu@${TEST_IP} 'hostname; whoami; pwd'
-                    '''
-                }
+                    sed -e 's/__TF_PROD_IP__/${PROD_IP}/g' \
+                       ansible/inventory/prod-hosts.template.yml > \
+                       ansible/inventory/prod-hosts.yml
+                """
+            }
+            
+            // Verify connectivity
+            sh '''
+                echo "=== TESTING SSH CONNECTIVITY ==="
+                ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
+                    -o StrictHostKeyChecking=no \
+                    ubuntu@$(terraform -chdir=terraform output -raw test_server_ip) hostname
+                
+                ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
+                    -o StrictHostKeyChecking=no \
+                    ubuntu@$(terraform -chdir=terraform output -raw prod_server_ip) hostname
+            '''
+                                  }
             }
         }
 
