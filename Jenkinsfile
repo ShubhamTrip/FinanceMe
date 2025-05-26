@@ -73,8 +73,7 @@ pipeline {
                         sh '''
                             terraform init
                             terraform apply -auto-approve \
-                            -var="create_test_env=true" \
-                            -var="create_prod_env=true" \
+                            -var="environment=test" \
                             -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
                         '''
                     }
