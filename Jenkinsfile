@@ -108,28 +108,40 @@ pipeline {
         }
 
         // Stage 7: Deploy to Prod (If Tests Pass)
-        stage('Deploy to Prod') {
+        stage('Provision Prod Server') {
             when {
                 expression { currentBuild.resultIsBetterOrEqualTo('SUCCESS') }
             }
             steps {
-                dir('terraform') {
-                    sh 'terraform apply -auto-approve -var="environment=prod"'
-                    // Generate inventory file dynamically for prod
+                withCredentials([file(credentialsId: 'jenkins-ssh-key', variable: 'SSH_KEY_FILE')]) {
+                    // 1. Create ONLY prod server
+                    dir('terraform') {
+                        sh '''
+                            terraform apply -auto-approve \
+                            -var="environment=prod" \
+                            -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
+                        '''
+                    }
+                    
+                    // 2. Inject prod IP into pre-created inventory
                     sh '''
-                        SERVER_IP=$(terraform output -raw prod_server_ip)
-                        cat > ../ansible/inventory/prod-hosts.yml << EOL
----
-all:
-  hosts:
-    prod-server:
-      ansible_host: $SERVER_IP
-      ansible_user: ubuntu
-      ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
-      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-EOL
+                        PROD_IP=$(terraform -chdir=terraform output -raw prod_server_ip)
+                        sed -i "s/__TERRAFORM_PROD_IP__/${PROD_IP}/g" ansible/inventory/prod-hosts.yml
+                        
+                        echo "=== PROD INVENTORY ==="
+                        cat ansible/inventory/prod-hosts.yml
+                        
+                        # Verify connectivity
+                        ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
+                            -o StrictHostKeyChecking=no \
+                            ubuntu@${PROD_IP} hostname
                     '''
                 }
+            }
+        }
+
+        stage('Deploy to Prod') {
+            steps {
                 ansiblePlaybook(
                     playbook: 'ansible/app-deploy.yml',
                     inventory: 'ansible/inventory/prod-hosts.yml',
@@ -138,8 +150,6 @@ EOL
                     ]
                 )
             }
-        }
-    }
     post {
         always {
             // Clean up sensitive files
