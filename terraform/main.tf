@@ -31,7 +31,7 @@ resource "aws_security_group" "finance_me_sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]  # App port open for testing
   }
-  
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -41,7 +41,7 @@ resource "aws_security_group" "finance_me_sg" {
 }
 
 resource "aws_instance" "test_server" {
-  ami           = "ami-0c02fb55956c7d316"  
+  ami           = "ami-084568db4383264d4"  
   instance_type = "t2.micro"
   key_name      = aws_key_pair.finance_me_key.key_name
   security_groups = [aws_security_group.finance_me_sg.name]
@@ -52,7 +52,7 @@ resource "aws_instance" "test_server" {
 
 resource "aws_instance" "prod_server" {
   count         = var.environment == "prod" ? 1 : 0
-  ami           = "ami-0c02fb55956c7d316"  
+  ami           = "ami-084568db4383264d4"  
   instance_type = "t2.micro"
   key_name      = aws_key_pair.finance_me_key.key_name
   security_groups = [aws_security_group.finance_me_sg.name]
