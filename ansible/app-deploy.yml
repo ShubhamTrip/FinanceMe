@@ -40,6 +40,6 @@
         name: account-service
         image: "{{ docker_image }}"
         ports:
-          - "8081:8081"
+          - "8081:8080"
         restart_policy: always
         state: started
