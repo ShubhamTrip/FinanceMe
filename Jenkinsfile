@@ -72,36 +72,38 @@ pipeline {
                         sh 'terraform init'
                         sh '''
                             terraform apply -auto-approve \
-                            -var="environment=test" \
+                            -var="create_test_env=true" \
+                            -var="create_prod_env=true" \
                             -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
                         '''
                     }
 
-                    sh '''
-                            # Create directory if not exists
-                            mkdir -p ansible/inventory/
-                            
-                            # First get the IP address
-                            TEST_SERVER_IP=$(terraform -chdir=terraform output -raw test_server_ip)
-                            
-                            # Then create the inventory file with proper YAML formatting
-                            cat << EOF > ansible/inventory/test-hosts.yml
-                        ---
-                        all:
-                            hosts:
-                                 test-server:
-                                     ansible_host: ${TEST_SERVER_IP}
-                                     ansible_user: ubuntu
-                                     ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
-                                     ansible_ssh_common_args: -o StrictHostKeyChecking=no
-                        EOF
-
-                            # Verify the file was created correctly
-                            echo "=== INVENTORY FILE CONTENTS ==="
-                            cat ansible/inventory/test-hosts.yml
-                            echo "=== END OF FILE ==="
-                        '''
+                    script {
+                def TEST_IP = sh(script: 'terraform -chdir=terraform output -raw test_server_ip', returnStdout: true).trim()
+                def PROD_IP = sh(script: 'terraform -chdir=terraform output -raw prod_server_ip', returnStdout: true).trim()
+                
+                sh """
+                    sed -e 's/__TF_TEST_IP__/${TEST_IP}/g' \
+                       ansible/inventory/test-hosts.template.yml > \
+                       ansible/inventory/test-hosts.yml
                     
+                    sed -e 's/__TF_PROD_IP__/${PROD_IP}/g' \
+                       ansible/inventory/prod-hosts.template.yml > \
+                       ansible/inventory/prod-hosts.yml
+                """
+            }
+            
+            // Verify connectivity
+            sh '''
+                echo "=== TESTING SSH CONNECTIVITY ==="
+                ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
+                    -o StrictHostKeyChecking=no \
+                    ubuntu@$(terraform -chdir=terraform output -raw test_server_ip) hostname
+                
+                ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
+                    -o StrictHostKeyChecking=no \
+                    ubuntu@$(terraform -chdir=terraform output -raw prod_server_ip) hostname
+            '''
                                   }
             }
         }
