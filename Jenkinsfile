@@ -73,18 +73,21 @@ pipeline {
                         sh '''
                             terraform init
                             terraform apply -auto-approve \
-                            -var="environment=test" \
                             -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
                         '''
                     }
 
                     script {
                 def TEST_IP = sh(script: 'terraform -chdir=terraform output -raw test_server_ip', returnStdout: true).trim()
-                
+                def PROD_IP = sh(script: 'terraform -chdir=terraform output -raw prod_server_ip', returnStdout: true).trim() 
                 sh """
                     sed -e 's/__TF_TEST_IP__/${TEST_IP}/g' \
                        ansible/inventory/test-hosts.template.yml > \
                        ansible/inventory/test-hosts.yml
+
+                    sed -e 's/__TF_PROD_IP__/${PROD_IP}/g' \
+                       ansible/inventory/prod-hosts.template.yml > \
+                       ansible/inventory/prod-hosts.yml
                 """
             }
                                   }
@@ -112,33 +115,6 @@ pipeline {
         }
 
         // Stage 7: Deploy to Prod (If Tests Pass)
-        stage('Provision Prod Server') {
-            steps {
-                withCredentials([file(credentialsId: 'jenkins-ssh-key', variable: 'SSH_KEY_FILE')]) {
-                    // 1. Create ONLY prod server
-                   dir('terraform') {
-                        sh 'terraform init'
-                        sh '''
-                            terraform init
-                            terraform apply -auto-approve \
-                            -var="environment=prod" \
-                            -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
-                        '''
-                    }
-
-                    script {
-                def PROD_IP = sh(script: 'terraform -chdir=terraform output -raw prod_server_ip', returnStdout: true).trim()
-                
-                sh """
-                    sed -e 's/__TF_PROD_IP__/${PROD_IP}/g' \
-                       ansible/inventory/prod-hosts.template.yml > \
-                       ansible/inventory/prod-hosts.yml
-                """
-            }
-                }
-            }
-        }
-
         stage('Deploy to Prod') {
             steps {
                 ansiblePlaybook(
