@@ -80,16 +80,11 @@ pipeline {
 
                     script {
                 def TEST_IP = sh(script: 'terraform -chdir=terraform output -raw test_server_ip', returnStdout: true).trim()
-                def PROD_IP = sh(script: 'terraform -chdir=terraform output -raw prod_server_ip', returnStdout: true).trim()
                 
                 sh """
                     sed -e 's/__TF_TEST_IP__/${TEST_IP}/g' \
                        ansible/inventory/test-hosts.template.yml > \
                        ansible/inventory/test-hosts.yml
-                    
-                    sed -e 's/__TF_PROD_IP__/${PROD_IP}/g' \
-                       ansible/inventory/prod-hosts.template.yml > \
-                       ansible/inventory/prod-hosts.yml
                 """
             }
             
