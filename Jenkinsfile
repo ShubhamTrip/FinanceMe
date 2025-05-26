@@ -48,65 +48,44 @@ pipeline {
               }
         }
         // Stage 4: Configure Test Server
-        stage('Provision Servers') {
+        stage('Provision Test Server') {
             steps {
                 withCredentials([file(credentialsId: 'jenkins-ssh-key', variable: 'SSH_KEY_FILE')]) {
+                    // 1. Setup SSH key
                     sh '''
-                        # Ensure .ssh directory exists with correct permissions
                         mkdir -p /var/lib/jenkins/.ssh
-                        chmod 700 /var/lib/jenkins/.ssh
-                        
-                        # Copy the key file
                         cp "$SSH_KEY_FILE" /var/lib/jenkins/.ssh/jenkins_financeme_key
                         chmod 600 /var/lib/jenkins/.ssh/jenkins_financeme_key
-                        
-                        # Generate public key
-                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key > /var/lib/jenkins/.ssh/jenkins_financeme_key.pub || {
-                            echo "Failed to generate public key. Key content might be malformed."
-                            exit 1
-                        }
-                        chmod 644 /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
+                        ssh-keygen -y -f /var/lib/jenkins/.ssh/jenkins_financeme_key > /var/lib/jenkins/.ssh/jenkins_financeme_key.pub
                     '''
                     
+                    // 2. Create ONLY test server
                     dir('terraform') {
-                        sh 'terraform init'
                         sh '''
                             terraform apply -auto-approve \
-                            -var="create_test_env=true" \
-                            -var="create_prod_env=true" \
+                            -var="environment=test" \
                             -var="public_key=$(cat /var/lib/jenkins/.ssh/jenkins_financeme_key.pub)"
                         '''
                     }
-
-                    script {
-                def TEST_IP = sh(script: 'terraform -chdir=terraform output -raw test_server_ip', returnStdout: true).trim()
-                def PROD_IP = sh(script: 'terraform -chdir=terraform output -raw prod_server_ip', returnStdout: true).trim()
-                
-                sh """
-                    sed -e 's/__TF_TEST_IP__/${TEST_IP}/g' \
-                       ansible/inventory/test-hosts.template.yml > \
-                       ansible/inventory/test-hosts.yml
                     
-                    sed -e 's/__TF_PROD_IP__/${PROD_IP}/g' \
-                       ansible/inventory/prod-hosts.template.yml > \
-                       ansible/inventory/prod-hosts.yml
-                """
-            }
-            
-            // Verify connectivity
-            sh '''
-                echo "=== TESTING SSH CONNECTIVITY ==="
-                ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
-                    -o StrictHostKeyChecking=no \
-                    ubuntu@$(terraform -chdir=terraform output -raw test_server_ip) hostname
-                
-                ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
-                    -o StrictHostKeyChecking=no \
-                    ubuntu@$(terraform -chdir=terraform output -raw prod_server_ip) hostname
-            '''
-                                  }
+                    // 3. Inject test IP into pre-created inventory
+                    sh '''
+                        TEST_IP=$(terraform -chdir=terraform output -raw test_server_ip)
+                        sed -i "s/__TERRAFORM_TEST_IP__/${TEST_IP}/g" ansible/inventory/test-hosts.yml
+                        
+                        echo "=== TEST INVENTORY ==="
+                        cat ansible/inventory/test-hosts.yml
+                        
+                        # Verify connectivity
+                        ssh -i /var/lib/jenkins/.ssh/jenkins_financeme_key \
+                            -o StrictHostKeyChecking=no \
+                            ubuntu@${TEST_IP} hostname
+                    '''
+                }
             }
         }
+
+
 
         // Stage 5: Deploy to Test Server
         stage('Deploy to Test') {
