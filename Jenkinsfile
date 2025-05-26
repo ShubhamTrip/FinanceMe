@@ -109,9 +109,6 @@ pipeline {
 
         // Stage 7: Deploy to Prod (If Tests Pass)
         stage('Provision Prod Server') {
-            when {
-                expression { currentBuild.resultIsBetterOrEqualTo('SUCCESS') }
-            }
             steps {
                 withCredentials([file(credentialsId: 'jenkins-ssh-key', variable: 'SSH_KEY_FILE')]) {
                     // 1. Create ONLY prod server
