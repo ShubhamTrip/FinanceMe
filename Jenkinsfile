@@ -83,12 +83,12 @@ pipeline {
                         cat > ansible/inventory/test-hosts.yml << 'EOL'
                     ---
                     all:
-                    hosts:
+                      hosts:
                         test-server:
-                        ansible_host: ${test_server_ip}
-                        ansible_user: ubuntu
-                        ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
-                        ansible_ssh_common_args: -o StrictHostKeyChecking=no
+                          ansible_host: ${test_server_ip}
+                          ansible_user: ubuntu
+                          ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
+                          ansible_ssh_common_args: -o StrictHostKeyChecking=no
                     EOL
 
                         # Get the actual IP from Terraform
