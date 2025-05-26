@@ -80,6 +80,7 @@ pipeline {
                     // Generate inventory file dynamically
                     sh '''
                         mkdir -p ansible/inventory/
+                        pwd
                         echo "test-server ansible_host=$(cd terraform && terraform output -raw test_server_ip)" > ansible/inventory/test-hosts.yml
                         echo "ansible_user=ubuntu" >> ansible/inventory/test-hosts.yml
                         echo "ansible_ssh_private_key_file=/var/lib/jenkins/.ssh/jenkins_financeme_key" >> ansible/inventory/test-hosts.yml
