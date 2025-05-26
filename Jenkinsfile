@@ -106,7 +106,7 @@ pipeline {
                     playbook: 'ansible/app-deploy.yml',
                     inventory: 'ansible/inventory/test-hosts.yml',
                     extraVars: [
-                        'docker_image': "financeme/account-service:${env.BUILD_ID}"
+                        'docker_image': "shubhamtrip16/account-service:${env.BUILD_ID}"
                     ]
                 )
             }
@@ -155,7 +155,7 @@ pipeline {
                     playbook: 'ansible/app-deploy.yml',
                     inventory: 'ansible/inventory/prod-hosts.yml',
                     extraVars: [
-                        'docker_image': "financeme/account-service:${env.BUILD_ID}"
+                        'docker_image': "shubhamtrip16/account-service:${env.BUILD_ID}"
                     ]
                 )
             }
