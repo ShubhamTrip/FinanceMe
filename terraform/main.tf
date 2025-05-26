@@ -25,6 +25,13 @@ resource "aws_security_group" "finance_me_sg" {
     cidr_blocks = ["0.0.0.0/0"]  # App port open for testing
   }
 
+  ingress {
+    from_port   = 8081
+    to_port     = 8081
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  # App port open for testing
+  }
+  
   egress {
     from_port   = 0
     to_port     = 0
