@@ -80,15 +80,23 @@ pipeline {
                     // Generate inventory file dynamically
                     sh '''
                         mkdir -p ansible/inventory/
-                        cat > ansible/inventory/test-hosts.yml << EOL
+                        cat > ansible/inventory/test-hosts.yml << 'EOL'
+                    ---
                     all:
                     hosts:
                         test-server:
-                        ansible_host: $(cd terraform && terraform output -raw test_server_ip)
+                        ansible_host: ${test_server_ip}
                         ansible_user: ubuntu
                         ansible_ssh_private_key_file: /var/lib/jenkins/.ssh/jenkins_financeme_key
-                        ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+                        ansible_ssh_common_args: -o StrictHostKeyChecking=no
                     EOL
+
+                        # Get the actual IP from Terraform
+                        test_server_ip=$(cd terraform && terraform output -raw test_server_ip)
+                        sed -i "s/\\\${test_server_ip}/${test_server_ip}/" ansible/inventory/test-hosts.yml
+                        
+                        # Verify the file
+                        cat ansible/inventory/test-hosts.yml
                     '''
                 }
             }
